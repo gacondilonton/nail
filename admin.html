@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Luxe & Bloom — Booking Dashboard</title>
+  <meta name="robots" content="noindex, nofollow" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['"Playfair Display"', 'Georgia', 'serif'],
+            body: ['"Inter"', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            cream:    '#faf8f5',
+            nude:     '#f5ebe0',
+            blush:    '#e8c4b8',
+            roseDark: '#c2727a',
+            roseDeep: '#b5495b',
+            brown:    '#44312e',
+            brownMid: '#6b4f47',
+            gold:     '#c49a3c',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #faf8f5; color: #44312e; }
+    .status-new { background: #fef3c7; color: #92400e; }
+    .status-confirmed { background: #d1fae5; color: #065f46; }
+    .status-cancelled { background: #fee2e2; color: #991b1b; }
+    .status-completed { background: #dbeafe; color: #1e40af; }
+    .action-btn { padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: 600; cursor: pointer; border: none; transition: all .2s; white-space: nowrap; }
+    .action-btn:hover { transform: scale(1.05); }
+    .btn-confirm { background: #d1fae5; color: #065f46; }
+    .btn-confirm:hover { background: #a7f3d0; }
+    .btn-cancel { background: #fee2e2; color: #991b1b; }
+    .btn-cancel:hover { background: #fecaca; }
+    .btn-complete { background: #dbeafe; color: #1e40af; }
+    .btn-complete:hover { background: #bfdbfe; }
+    .btn-new { background: #fef3c7; color: #92400e; }
+    .btn-new:hover { background: #fde68a; }
+    .updating-row { opacity: 0.5; pointer-events: none; }
+
+    /* Calendar */
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+    .cal-header { text-align: center; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #6b4f47; padding: 8px 0; }
+    .cal-day {
+      min-height: 90px; border: 1px solid #f5ebe0; padding: 6px; cursor: pointer;
+      transition: all .15s; position: relative; vertical-align: top;
+    }
+    .cal-day:hover { background: #f5ebe0; }
+    .cal-day.today { background: #fef3c7; }
+    .cal-day.selected { background: #e8c4b8; }
+    .cal-day.other-month { opacity: .35; }
+    .cal-day-num { font-size: 13px; font-weight: 600; color: #44312e; margin-bottom: 4px; }
+    .cal-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 1px; }
+    .dot-new { background: #f59e0b; }
+    .dot-confirmed { background: #10b981; }
+    .dot-cancelled { background: #ef4444; }
+    .dot-completed { background: #3b82f6; }
+    .cal-count { font-size: 10px; color: #6b4f47; margin-top: 2px; }
+    .cal-booking-preview { font-size: 10px; color: #44312e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.4; }
+
+    /* Detail Panel */
+    .detail-panel { max-height: 0; overflow: hidden; transition: max-height .3s ease; }
+    .detail-panel.open { max-height: 2000px; }
+
+    /* Modal overlay */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 50; display: none; align-items: center; justify-content: center; padding: 16px; }
+    .modal-overlay.active { display: flex; }
+  </style>
+</head>
+<body class="antialiased min-h-screen">
+
+  <script>
+    const ADMIN_PASSWORD = 'longbuihoang';
+    const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbwdrq0F9xNajSEchDuCYZgQ1P5M_rB6wERuOAvRP-T2sSzorVnc5NRFeNXqhbQaCh_D/exec';
+  </script>
+
+
+  <!-- LOGIN SCREEN -->
+  <div id="loginScreen" class="min-h-screen flex items-center justify-center px-4">
+    <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center">
+      <h1 class="font-display text-2xl font-bold text-brown mb-1">Luxe <span class="text-roseDark">&</span> Bloom</h1>
+      <p class="text-brownMid text-xs tracking-wide uppercase mb-6">Booking Dashboard</p>
+      <form onsubmit="handleLogin(event)">
+        <div class="mb-4">
+          <input type="password" id="passwordInput" placeholder="Enter password"
+                 class="w-full border border-nude rounded-xl px-4 py-3 text-sm text-brown bg-cream/50 focus:outline-none focus:ring-2 focus:ring-roseDark/30 focus:border-roseDark transition" />
+        </div>
+        <p id="loginError" class="text-roseDeep text-xs mb-3 hidden">Incorrect password. Please try again.</p>
+        <p class="text-brownMid text-xs mb-4">Password: <span class="font-semibold text-brown select-all">longbuihoang</span></p>
+        <button type="submit" class="w-full bg-roseDark hover:bg-roseDeep text-white font-semibold py-3 rounded-full transition">Login</button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- DASHBOARD -->
+  <div id="dashboard" class="hidden">
+    <!-- Header -->
+    <header class="bg-white border-b border-nude sticky top-0 z-10">
+      <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div>
+          <h1 class="font-display text-xl font-semibold text-brown">Luxe <span class="text-roseDark">&</span> Bloom</h1>
+          <p class="text-brownMid text-[11px] tracking-wide uppercase">Booking Dashboard</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="loadBookings()" class="flex items-center gap-1.5 text-sm text-brownMid hover:text-roseDark transition" title="Refresh">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182"/></svg>
+            Refresh
+          </button>
+          <button onclick="logout()" class="text-sm text-brownMid hover:text-roseDeep transition">Logout</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-4 py-6">
+      <!-- Stats Cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
+          <p class="text-brownMid text-xs uppercase tracking-wide mb-1">Total Bookings</p>
+          <p id="statTotal" class="font-display text-2xl font-bold text-brown">–</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
+          <p class="text-brownMid text-xs uppercase tracking-wide mb-1">New</p>
+          <p id="statNew" class="font-display text-2xl font-bold text-gold">–</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
+          <p class="text-brownMid text-xs uppercase tracking-wide mb-1">Confirmed</p>
+          <p id="statConfirmed" class="font-display text-2xl font-bold text-green-600">–</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
+          <p class="text-brownMid text-xs uppercase tracking-wide mb-1">Today</p>
+          <p id="statToday" class="font-display text-2xl font-bold text-roseDark">–</p>
+        </div>
+      </div>
+
+      <!-- View Toggle -->
+      <div class="flex items-center gap-2 mb-4">
+        <button id="btnCalView" onclick="switchView('calendar')" class="px-4 py-2 rounded-full text-sm font-medium transition bg-roseDark text-white">Calendar</button>
+        <button id="btnListView" onclick="switchView('list')" class="px-4 py-2 rounded-full text-sm font-medium transition bg-nude text-brownMid hover:bg-blush hover:text-brown">Upcoming List</button>
+      </div>
+
+      <!-- Loading -->
+      <div id="loadingState" class="text-center py-12">
+        <div class="inline-block w-8 h-8 border-2 border-nude border-t-roseDark rounded-full animate-spin mb-3"></div>
+        <p class="text-brownMid text-sm">Loading bookings from Google Sheets…</p>
+      </div>
+
+      <!-- Calendar Container -->
+      <div id="calendarContainer" class="hidden">
+        <!-- Month Navigation -->
+        <div class="flex items-center justify-between mb-4">
+          <button onclick="changeMonth(-1)" class="flex items-center gap-1 text-sm text-brownMid hover:text-roseDark transition px-3 py-2 rounded-xl hover:bg-nude">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+          </button>
+          <div class="text-center">
+            <h2 id="calMonthTitle" class="font-display text-xl font-semibold text-brown"></h2>
+            <button onclick="goToday()" class="text-xs text-roseDark hover:text-roseDeep transition mt-1">Today</button>
+          </div>
+          <button onclick="changeMonth(1)" class="flex items-center gap-1 text-sm text-brownMid hover:text-roseDark transition px-3 py-2 rounded-xl hover:bg-nude">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+          </button>
+        </div>
+
+        <!-- Legend -->
+        <div class="flex flex-wrap gap-4 mb-3 text-xs text-brownMid">
+          <span class="flex items-center gap-1"><span class="cal-dot dot-new"></span> New</span>
+          <span class="flex items-center gap-1"><span class="cal-dot dot-confirmed"></span> Confirmed</span>
+          <span class="flex items-center gap-1"><span class="cal-dot dot-completed"></span> Completed</span>
+          <span class="flex items-center gap-1"><span class="cal-dot dot-cancelled"></span> Cancelled</span>
+        </div>
+
+        <!-- Calendar Grid -->
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div class="cal-grid border-b border-nude bg-nude/30">
+            <div class="cal-header">Mon</div>
+            <div class="cal-header">Tue</div>
+            <div class="cal-header">Wed</div>
+            <div class="cal-header">Thu</div>
+            <div class="cal-header">Fri</div>
+            <div class="cal-header">Sat</div>
+            <div class="cal-header">Sun</div>
+          </div>
+          <div id="calBody" class="cal-grid"></div>
+        </div>
+      </div>
+
+      <!-- List View Container -->
+      <div id="listContainer" class="hidden">
+        <div class="flex flex-wrap items-center gap-3 mb-4">
+          <select id="listFilterStatus" onchange="renderList()" class="border border-nude rounded-xl px-3 py-2 text-sm text-brown bg-white focus:outline-none focus:ring-2 focus:ring-roseDark/30">
+            <option value="all">All Status</option>
+            <option value="New">New</option>
+            <option value="Confirmed">Confirmed</option>
+            <option value="Completed">Completed</option>
+            <option value="Cancelled">Cancelled</option>
+          </select>
+          <input type="text" id="listSearch" oninput="renderList()" placeholder="Search name, phone, service…"
+                 class="border border-nude rounded-xl px-3 py-2 text-sm text-brown bg-white focus:outline-none focus:ring-2 focus:ring-roseDark/30 flex-1 min-w-[180px]" />
+        </div>
+        <div id="listBody" class="space-y-3"></div>
+        <p id="listCount" class="text-brownMid/60 text-xs mt-3 text-right"></p>
+      </div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="hidden text-center py-12">
+        <p class="text-brownMid text-sm">No bookings found.</p>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- DAY DETAIL MODAL -->
+  <div id="dayModal" class="modal-overlay" onclick="if(event.target===this)closeDayModal()">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto">
+      <div class="sticky top-0 bg-white border-b border-nude px-5 py-4 flex items-center justify-between rounded-t-2xl z-10">
+        <div>
+          <h3 id="modalDate" class="font-display text-lg font-semibold text-brown"></h3>
+          <p id="modalCount" class="text-brownMid text-xs"></p>
+        </div>
+        <button onclick="closeDayModal()" class="text-brownMid hover:text-roseDeep transition text-xl leading-none">&times;</button>
+      </div>
+      <div id="modalBody" class="px-5 py-4 space-y-3">
+        <!-- booking cards rendered here -->
+      </div>
+    </div>
+  </div>
+
+
+  <!-- JAVASCRIPT -->
+  <script>
+    let allBookings = [];
+    let currentYear, currentMonth; // 0-indexed month
+    let selectedDateISO = null;
+
+    // ── DATE / TIME PARSERS ─────────────────────────────────────────────
+    function parseSheetDate(raw) {
+      if (!raw) return '';
+      const s = String(raw);
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) return s;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        const [y, m, d] = s.split('-');
+        return `${d}/${m}/${y}`;
+      }
+      if (s.includes('T')) {
+        try {
+          const dt = new Date(s);
+          return dt.toLocaleDateString('en-GB', { timeZone: 'Pacific/Auckland', day: '2-digit', month: '2-digit', year: 'numeric' });
+        } catch(e) {}
+      }
+      return s;
+    }
+
+    function parseSheetTime(raw) {
+      if (!raw) return '';
+      const s = String(raw);
+      if (/\d{1,2}:\d{2}\s*(AM|PM)/i.test(s)) return s;
+      if (/^\d{1,2}:\d{2}$/.test(s)) {
+        const [h, m] = s.split(':').map(Number);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = h % 12 || 12;
+        return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+      }
+      if (s.includes('T')) {
+        try {
+          const match = s.match(/T(\d{2}):(\d{2})/);
+          if (match) {
+            let h = parseInt(match[1]);
+            const m = match[2];
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const h12 = h % 12 || 12;
+            return `${h12}:${m} ${ampm}`;
+          }
+        } catch(e) {}
+      }
+      return s;
+    }
+
+    function toISODate(dateStr) {
+      if (!dateStr) return '';
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
+        const [d, m, y] = dateStr.split('/');
+        return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+      }
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+      return dateStr;
+    }
+
+
+    // ── LOGIN ───────────────────────────────────────────────────────────
+    function handleLogin(e) {
+      e.preventDefault();
+      if (document.getElementById('passwordInput').value === ADMIN_PASSWORD) {
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('dashboard').classList.remove('hidden');
+        sessionStorage.setItem('lb_admin', '1');
+        loadBookings();
+      } else {
+        document.getElementById('loginError').classList.remove('hidden');
+        document.getElementById('passwordInput').value = '';
+        document.getElementById('passwordInput').focus();
+      }
+    }
+    function logout() {
+      sessionStorage.removeItem('lb_admin');
+      document.getElementById('dashboard').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+      document.getElementById('passwordInput').value = '';
+      document.getElementById('loginError').classList.add('hidden');
+    }
+    if (sessionStorage.getItem('lb_admin') === '1') {
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('dashboard').classList.remove('hidden');
+      loadBookings();
+    }
+
+
+    // ── LOAD BOOKINGS ───────────────────────────────────────────────────
+    async function loadBookings() {
+      const loading = document.getElementById('loadingState');
+      const cal = document.getElementById('calendarContainer');
+      const empty = document.getElementById('emptyState');
+
+      loading.classList.remove('hidden');
+      cal.classList.add('hidden');
+      empty.classList.add('hidden');
+
+      try {
+        const res = await fetch(GOOGLE_SHEET_URL);
+        const json = await res.json();
+
+        if (json.result === 'success' && json.data) {
+          allBookings = json.data.map((row, i) => {
+            const parsedDate = parseSheetDate(row.date);
+            const parsedTime = parseSheetTime(row.time);
+            return {
+              index:      i + 1,
+              row_number: i + 2,
+              timestamp:  row.timestamp || '',
+              service:    row.service || '',
+              staff:      row.staff || '',
+              date:       parsedDate,
+              dateISO:    toISODate(parsedDate),
+              time:       parsedTime,
+              name:       row.customer_name || row.name || '',
+              phone:      row.phone || '',
+              notes:      row.notes || '',
+              status:     row.status || 'New',
+            };
+          });
+
+          updateStats();
+
+          // Init calendar to current month
+          const now = new Date();
+          if (!currentYear) { currentYear = now.getFullYear(); currentMonth = now.getMonth(); }
+          loading.classList.add('hidden');
+          switchView(currentView);
+        } else {
+          allBookings = [];
+          loading.classList.add('hidden');
+          empty.classList.remove('hidden');
+        }
+      } catch (err) {
+        console.error('Failed to load bookings:', err);
+        loading.classList.add('hidden');
+        empty.classList.remove('hidden');
+        document.getElementById('emptyState').innerHTML =
+          '<p class="text-roseDeep text-sm">Failed to load data. Check your Google Sheet URL and Apps Script deployment.</p>';
+      }
+    }
+
+
+    // ── STATS ───────────────────────────────────────────────────────────
+    function updateStats() {
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Pacific/Auckland' });
+      document.getElementById('statTotal').textContent = allBookings.length;
+      document.getElementById('statNew').textContent = allBookings.filter(b => b.status === 'New').length;
+      document.getElementById('statConfirmed').textContent = allBookings.filter(b => b.status === 'Confirmed').length;
+      document.getElementById('statToday').textContent = allBookings.filter(b => b.dateISO === today).length;
+    }
+
+
+    // ── CALENDAR ────────────────────────────────────────────────────────
+    const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    function changeMonth(delta) {
+      currentMonth += delta;
+      if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+      if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+      renderCalendar();
+    }
+
+    function goToday() {
+      const now = new Date();
+      currentYear = now.getFullYear();
+      currentMonth = now.getMonth();
+      renderCalendar();
+    }
+
+    function renderCalendar() {
+      document.getElementById('calMonthTitle').textContent = `${MONTH_NAMES[currentMonth]} ${currentYear}`;
+
+      const body = document.getElementById('calBody');
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Pacific/Auckland' });
+
+      // First day of month (0=Sun, convert to Mon-start: 0=Mon)
+      const firstDay = new Date(currentYear, currentMonth, 1);
+      let startDow = firstDay.getDay(); // 0=Sun
+      startDow = startDow === 0 ? 6 : startDow - 1; // convert: 0=Mon
+
+      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+      const daysInPrev = new Date(currentYear, currentMonth, 0).getDate();
+
+      // Group bookings by ISO date for quick lookup
+      const bookingsByDate = {};
+      allBookings.forEach(b => {
+        if (!b.dateISO) return;
+        if (!bookingsByDate[b.dateISO]) bookingsByDate[b.dateISO] = [];
+        bookingsByDate[b.dateISO].push(b);
+      });
+
+      let html = '';
+      const totalCells = Math.ceil((startDow + daysInMonth) / 7) * 7;
+
+      for (let i = 0; i < totalCells; i++) {
+        let day, month, year, isOther = false;
+
+        if (i < startDow) {
+          // Previous month
+          day = daysInPrev - startDow + i + 1;
+          month = currentMonth - 1;
+          year = currentYear;
+          if (month < 0) { month = 11; year--; }
+          isOther = true;
+        } else if (i >= startDow + daysInMonth) {
+          // Next month
+          day = i - startDow - daysInMonth + 1;
+          month = currentMonth + 1;
+          year = currentYear;
+          if (month > 11) { month = 0; year++; }
+          isOther = true;
+        } else {
+          day = i - startDow + 1;
+          month = currentMonth;
+          year = currentYear;
+        }
+
+        const isoDate = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        const dayBookings = bookingsByDate[isoDate] || [];
+        const isToday = isoDate === today;
+        const isSelected = isoDate === selectedDateISO;
+
+        let classes = 'cal-day';
+        if (isOther) classes += ' other-month';
+        if (isToday) classes += ' today';
+        if (isSelected) classes += ' selected';
+
+        // Status dots
+        let dots = '';
+        const statusCounts = { New: 0, Confirmed: 0, Completed: 0, Cancelled: 0 };
+        dayBookings.forEach(b => { if (statusCounts[b.status] !== undefined) statusCounts[b.status]++; });
+
+        for (const [st, count] of Object.entries(statusCounts)) {
+          for (let d = 0; d < Math.min(count, 4); d++) {
+            dots += `<span class="cal-dot dot-${st.toLowerCase()}"></span>`;
+          }
+        }
+
+        // Preview first 2 bookings
+        let previews = '';
+        dayBookings.slice(0, 2).forEach(b => {
+          previews += `<div class="cal-booking-preview">${b.time} ${b.name}</div>`;
+        });
+        if (dayBookings.length > 2) {
+          previews += `<div class="cal-booking-preview text-brownMid">+${dayBookings.length - 2} more</div>`;
+        }
+
+        html += `
+          <div class="${classes}" onclick="openDay('${isoDate}')">
+            <div class="cal-day-num">${day}</div>
+            <div>${dots}</div>
+            ${previews}
+            ${dayBookings.length > 0 ? `<div class="cal-count">${dayBookings.length} booking${dayBookings.length > 1 ? 's' : ''}</div>` : ''}
+          </div>`;
+      }
+
+      body.innerHTML = html;
+    }
+
+
+    // ── DAY DETAIL MODAL ────────────────────────────────────────────────
+    function openDay(isoDate) {
+      selectedDateISO = isoDate;
+      renderCalendar(); // highlight selected
+
+      const dayBookings = allBookings.filter(b => b.dateISO === isoDate);
+
+      // Format display date
+      const [y, m, d] = isoDate.split('-');
+      const displayDate = `${d}/${m}/${y}`;
+      const dayName = new Date(parseInt(y), parseInt(m)-1, parseInt(d))
+        .toLocaleDateString('en-NZ', { weekday: 'long' });
+
+      document.getElementById('modalDate').textContent = `${dayName}, ${displayDate}`;
+      document.getElementById('modalCount').textContent = dayBookings.length
+        ? `${dayBookings.length} booking${dayBookings.length > 1 ? 's' : ''}`
+        : 'No bookings';
+
+      const body = document.getElementById('modalBody');
+
+      if (!dayBookings.length) {
+        body.innerHTML = '<p class="text-brownMid text-sm text-center py-6">No bookings for this day.</p>';
+      } else {
+        // Sort by time
+        const sorted = [...dayBookings].sort((a, b) => a.time.localeCompare(b.time));
+
+        body.innerHTML = sorted.map(b => {
+          const statusClass = `status-${b.status.toLowerCase()}`;
+
+          let actions = '';
+          const row = b.row_number;
+          if (b.status === 'New') {
+            actions = `
+              <button class="action-btn btn-confirm" onclick="updateStatus(${row}, 'Confirmed', this)">Confirm</button>
+              <button class="action-btn btn-cancel" onclick="updateStatus(${row}, 'Cancelled', this)">Cancel</button>`;
+          } else if (b.status === 'Confirmed') {
+            actions = `
+              <button class="action-btn btn-complete" onclick="updateStatus(${row}, 'Completed', this)">Complete</button>
+              <button class="action-btn btn-cancel" onclick="updateStatus(${row}, 'Cancelled', this)">Cancel</button>`;
+          } else if (b.status === 'Cancelled') {
+            actions = `
+              <button class="action-btn btn-new" onclick="updateStatus(${row}, 'New', this)">Re-open</button>`;
+          } else if (b.status === 'Completed') {
+            actions = `<span class="text-brownMid/40 text-xs">Done</span>`;
+          }
+
+          return `
+            <div id="card-${row}" class="bg-cream/50 rounded-xl p-4 border border-nude">
+              <div class="flex items-start justify-between mb-2">
+                <div>
+                  <span class="font-semibold text-brown text-sm">${b.name}</span>
+                  <a href="tel:${b.phone}" class="text-roseDark text-xs hover:underline ml-2">${b.phone}</a>
+                </div>
+                <span class="inline-block px-2.5 py-1 rounded-full text-xs font-medium ${statusClass}">${b.status}</span>
+              </div>
+              <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-brownMid mb-3">
+                <div><span class="font-medium text-brown">Time:</span> ${b.time}</div>
+                <div><span class="font-medium text-brown">Technician:</span> ${b.staff}</div>
+                <div class="col-span-2"><span class="font-medium text-brown">Service:</span> ${b.service}</div>
+                ${b.notes ? `<div class="col-span-2"><span class="font-medium text-brown">Notes:</span> ${b.notes}</div>` : ''}
+              </div>
+              <div class="flex gap-2 flex-wrap">${actions}</div>
+            </div>`;
+        }).join('');
+      }
+
+      document.getElementById('dayModal').classList.add('active');
+    }
+
+    function closeDayModal() {
+      document.getElementById('dayModal').classList.remove('active');
+      selectedDateISO = null;
+      renderCalendar();
+    }
+
+    // Close modal on Escape
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeDayModal();
+    });
+
+
+    // ── VIEW TOGGLE ─────────────────────────────────────────────────────
+    let currentView = 'calendar';
+
+    function switchView(view) {
+      currentView = view;
+      const cal = document.getElementById('calendarContainer');
+      const list = document.getElementById('listContainer');
+      const btnCal = document.getElementById('btnCalView');
+      const btnList = document.getElementById('btnListView');
+
+      if (view === 'calendar') {
+        cal.classList.remove('hidden');
+        list.classList.add('hidden');
+        btnCal.className = 'px-4 py-2 rounded-full text-sm font-medium transition bg-roseDark text-white';
+        btnList.className = 'px-4 py-2 rounded-full text-sm font-medium transition bg-nude text-brownMid hover:bg-blush hover:text-brown';
+        renderCalendar();
+      } else {
+        cal.classList.add('hidden');
+        list.classList.remove('hidden');
+        btnCal.className = 'px-4 py-2 rounded-full text-sm font-medium transition bg-nude text-brownMid hover:bg-blush hover:text-brown';
+        btnList.className = 'px-4 py-2 rounded-full text-sm font-medium transition bg-roseDark text-white';
+        renderList();
+      }
+    }
+
+
+    // ── LIST VIEW ───────────────────────────────────────────────────────
+    function renderList() {
+      const statusFilter = document.getElementById('listFilterStatus').value;
+      const searchFilter = document.getElementById('listSearch').value.toLowerCase().trim();
+
+      // Get today in ISO for comparison
+      const todayISO = new Date().toLocaleDateString('en-CA', { timeZone: 'Pacific/Auckland' });
+
+      // Filter: only upcoming or today, not cancelled (unless filtered)
+      let filtered = allBookings.filter(b => {
+        if (statusFilter !== 'all' && b.status !== statusFilter) return false;
+        if (searchFilter && !b.name.toLowerCase().includes(searchFilter) && !b.phone.includes(searchFilter) && !b.service.toLowerCase().includes(searchFilter)) return false;
+        return true;
+      });
+
+      // Sort by date ascending (upcoming first), then by time
+      filtered.sort((a, b) => {
+        if (a.dateISO !== b.dateISO) return a.dateISO.localeCompare(b.dateISO);
+        return a.time.localeCompare(b.time);
+      });
+
+      const body = document.getElementById('listBody');
+
+      if (!filtered.length) {
+        body.innerHTML = '<p class="text-brownMid text-sm text-center py-8">No bookings found.</p>';
+        document.getElementById('listCount').textContent = '';
+        return;
+      }
+
+      // Group by date
+      const grouped = {};
+      filtered.forEach(b => {
+        const key = b.dateISO || 'Unknown';
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(b);
+      });
+
+      let html = '';
+      for (const [isoDate, bookings] of Object.entries(grouped)) {
+        // Format date header
+        let dateLabel = isoDate;
+        try {
+          const [y, m, d] = isoDate.split('-');
+          const dt = new Date(parseInt(y), parseInt(m)-1, parseInt(d));
+          const dayName = dt.toLocaleDateString('en-NZ', { weekday: 'long' });
+          dateLabel = `${dayName}, ${d}/${m}/${y}`;
+          if (isoDate === todayISO) dateLabel += ' — Today';
+        } catch(e) {}
+
+        const isPast = isoDate < todayISO;
+
+        html += `<div class="mb-4 ${isPast ? 'opacity-50' : ''}">
+          <h4 class="font-display text-sm font-semibold text-brown mb-2 flex items-center gap-2">
+            ${isoDate === todayISO ? '<span class="inline-block w-2 h-2 rounded-full bg-roseDark animate-pulse"></span>' : ''}
+            ${dateLabel}
+            <span class="text-brownMid/50 text-xs font-normal">${bookings.length} booking${bookings.length > 1 ? 's' : ''}</span>
+          </h4>`;
+
+        bookings.forEach(b => {
+          const statusClass = `status-${b.status.toLowerCase()}`;
+          let actions = '';
+          const row = b.row_number;
+          if (b.status === 'New') {
+            actions = `<button class="action-btn btn-confirm" onclick="updateStatus(${row}, 'Confirmed', this)">Confirm</button>
+                       <button class="action-btn btn-cancel" onclick="updateStatus(${row}, 'Cancelled', this)">Cancel</button>`;
+          } else if (b.status === 'Confirmed') {
+            actions = `<button class="action-btn btn-complete" onclick="updateStatus(${row}, 'Completed', this)">Complete</button>
+                       <button class="action-btn btn-cancel" onclick="updateStatus(${row}, 'Cancelled', this)">Cancel</button>`;
+          } else if (b.status === 'Cancelled') {
+            actions = `<button class="action-btn btn-new" onclick="updateStatus(${row}, 'New', this)">Re-open</button>`;
+          } else if (b.status === 'Completed') {
+            actions = `<span class="text-brownMid/40 text-xs">Done</span>`;
+          }
+
+          html += `
+            <div id="list-${row}" class="bg-white rounded-xl p-4 border border-nude flex flex-col sm:flex-row sm:items-center gap-3 mb-2">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="font-semibold text-brown text-sm">${b.time}</span>
+                  <span class="text-brownMid text-xs">·</span>
+                  <span class="font-medium text-brown text-sm truncate">${b.name}</span>
+                  <a href="tel:${b.phone}" class="text-roseDark text-xs hover:underline">${b.phone}</a>
+                </div>
+                <div class="text-xs text-brownMid">
+                  ${b.service} · ${b.staff}${b.notes ? ` · <span class="italic">${b.notes}</span>` : ''}
+                </div>
+              </div>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <span class="inline-block px-2.5 py-1 rounded-full text-xs font-medium ${statusClass}">${b.status}</span>
+                ${actions}
+              </div>
+            </div>`;
+        });
+
+        html += '</div>';
+      }
+
+      body.innerHTML = html;
+      document.getElementById('listCount').textContent = `${filtered.length} bookings`;
+    }
+
+
+    // ── UPDATE STATUS ───────────────────────────────────────────────────
+    async function updateStatus(rowNumber, newStatus, btnEl) {
+      // ── Optimistic UI: update instantly, send request in background ──
+      const booking = allBookings.find(b => b.row_number === rowNumber);
+      const oldStatus = booking ? booking.status : null;
+
+      // Update data immediately
+      if (booking) booking.status = newStatus;
+      updateStats();
+
+      // Re-render UI instantly
+      if (currentView === 'calendar') {
+        renderCalendar();
+        if (selectedDateISO) openDay(selectedDateISO);
+      } else {
+        renderList();
+      }
+
+      // Send to Google Sheets in background
+      try {
+        const res = await fetch(GOOGLE_SHEET_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            action: 'updateStatus',
+            row: rowNumber,
+            status: newStatus,
+          }),
+        });
+
+        const json = await res.json();
+
+        if (json.result !== 'success') {
+          // Revert on failure
+          if (booking) booking.status = oldStatus;
+          updateStats();
+          if (currentView === 'calendar') { renderCalendar(); if (selectedDateISO) openDay(selectedDateISO); }
+          else { renderList(); }
+          showToast('Update failed — reverted', 'error');
+        } else {
+          showToast(`Status → ${newStatus}`, 'success');
+        }
+      } catch (err) {
+        console.error('Update failed:', err);
+        // Revert on error
+        if (booking) booking.status = oldStatus;
+        updateStats();
+        if (currentView === 'calendar') { renderCalendar(); if (selectedDateISO) openDay(selectedDateISO); }
+        else { renderList(); }
+        showToast('Connection error — reverted', 'error');
+      }
+    }
+
+    // ── Toast notification ──
+    function showToast(message, type = 'success') {
+      const existing = document.getElementById('toast');
+      if (existing) existing.remove();
+      const toast = document.createElement('div');
+      toast.id = 'toast';
+      toast.className = `fixed bottom-6 right-6 z-[999] px-5 py-3 rounded-xl text-sm font-medium shadow-lg transition-all duration-300 ${
+        type === 'success' ? 'bg-green-600 text-white' : 'bg-red-500 text-white'
+      }`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 2500);
+    }
+  </script>
+
+</body>
+</html>
